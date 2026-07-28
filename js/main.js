@@ -1,12 +1,12 @@
 // js/main.js
 
-// 您的專屬 GAS API 網址
+// 您的專屬 GAS API 網址 (請確認這是最新部署的網址)
 const GAS_URL = "https://script.google.com/macros/s/AKfycbz8MVcuqeYMtbdJVPDIk6cTwiDKuMgGZCR5ju0hPcxdrq1ucDh_y5Sy1Qltm_nmcEV9/exec";
 
 // 狀態管理：儲存所有案件資料
 let casesData = [];
 
-// 工具函數：檔案轉 Base64
+// 工具函數：將檔案轉為 Base64 格式，讓 GAS 能夠接收與還原
 const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -18,12 +18,13 @@ const fileToBase64 = (file) => {
 
 // 將所有功能綁定在 window.app 以供 HTML 呼叫
 window.app = {
-    // 1. 儲存案件
+    // 1. 儲存案件 (包含文字與檔案上傳)
     saveCase: async function(event) {
         event.preventDefault();
         document.getElementById('loading').style.display = 'flex';
 
         try {
+            // 準備要傳送的基礎資料
             const formData = {
                 action: document.getElementById('editId').value ? 'edit' : 'add',
                 id: document.getElementById('editId').value || Date.now().toString(),
@@ -44,44 +45,59 @@ window.app = {
                 useLicense: document.getElementById('c_useLicense').value,
                 agent: document.getElementById('c_agent').value,
                 notes: document.getElementById('c_notes').value,
-                photos: [],
-                pdfs: []
+                
+                // 🌟 關鍵修改：準備三個陣列
+                files: [],  // 這個是專門打包給 GAS 雲端上傳用的
+                photos: [], // 這個是留給前端網頁即時預覽照片用的
+                pdfs: []    // 這個是留給前端網頁即時顯示 PDF 檔名用的
             };
 
-            // 處理檔案 (為了展示快速效果，這裡暫時將上傳檔案轉為預覽用字串存入前端，實際需發至GAS)
+            // 處理照片檔案
             const photoInput = document.getElementById('c_photos');
             for (let file of photoInput.files) {
                 const b64 = await fileToBase64(file);
-                formData.photos.push(b64.data); // 儲存預覽圖片
+                // 放入給 GAS 的檔案清單
+                formData.files.push({ name: file.name, type: file.type, base64: b64.data });
+                // 放入前端預覽清單
+                formData.photos.push(b64.data); 
             }
 
+            // 處理 PDF 檔案
             const pdfInput = document.getElementById('c_pdfs');
             for (let file of pdfInput.files) {
+                const b64 = await fileToBase64(file);
+                // 放入給 GAS 的檔案清單
+                formData.files.push({ name: file.name, type: file.type, base64: b64.data });
+                // 放入前端預覽清單 (暫時給一個 # 連結)
                 formData.pdfs.push({ name: file.name, url: "#" }); 
             }
 
-            // 發送至 GAS 雲端 (這裡執行實際的 fetch)
+            // 🚀 發送至 GAS 雲端
             const response = await fetch(GAS_URL, {
                 method: 'POST',
                 body: JSON.stringify(formData)
             });
             const result = await response.json();
 
-            // 由於 GAS 可能需要時間回傳完整列表，為了讓畫面即時更新，我們直接操作前端陣列
-            if (formData.action === 'edit') {
-                const index = casesData.findIndex(c => c.id === formData.id);
-                if (index > -1) casesData[index] = formData;
-            } else {
-                casesData.unshift(formData);
-            }
+            if (result.status === 'success') {
+                // 為了讓畫面即時更新，我們直接操作前端陣列
+                if (formData.action === 'edit') {
+                    const index = casesData.findIndex(c => c.id === formData.id);
+                    if (index > -1) casesData[index] = formData;
+                } else {
+                    casesData.unshift(formData);
+                }
 
-            this.cancelEdit();
-            this.renderCases();
-            alert('資料已成功同步至雲端！');
+                this.cancelEdit();
+                this.renderCases();
+                alert('資料與檔案已成功同步至雲端！');
+            } else {
+                alert('儲存失敗：' + result.message);
+            }
 
         } catch (error) {
             console.error(error);
-            alert('連線至 Google 雲端發生錯誤。');
+            alert('連線至 Google 雲端發生錯誤，請檢查網路連線。');
         } finally {
             document.getElementById('loading').style.display = 'none';
         }
