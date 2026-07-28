@@ -5,16 +5,10 @@ import { getFirestore, collection, addDoc, getDocs, doc, setDoc, deleteDoc, quer
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAjCvMLiZmEUEgfqjXAHSFBuKHk9Uyrfkw",
-  authDomain: "real-estate-case-management.firebaseapp.com",
-  projectId: "real-estate-case-management",
-  storageBucket: "real-estate-case-management.firebasestorage.app",
-  messagingSenderId: "22434337168",
-  appId: "1:22434337168:web:27e65ef9dd4fb01a3e6315",
-  measurementId: "G-5BX5KSTZQR"
-};
+// 🌟 關鍵修改：從外部檔案引入金鑰設定
+import { firebaseConfig } from './firebase-config.js';
 
+// 初始化 Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
