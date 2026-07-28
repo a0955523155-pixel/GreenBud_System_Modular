@@ -6,14 +6,14 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstati
 // 新增引入 Auth 模組
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// ⚠️ 請填入您的 Firebase Config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123",
-  appId: "1:123:web:abc"
+  apiKey: "AIzaSyAjCvMLiZmEUEgfqjXAHSFBuKHk9Uyrfkw",
+  authDomain: "real-estate-case-management.firebaseapp.com",
+  projectId: "real-estate-case-management",
+  storageBucket: "real-estate-case-management.firebasestorage.app",
+  messagingSenderId: "22434337168",
+  appId: "1:22434337168:web:27e65ef9dd4fb01a3e6315",
+  measurementId: "G-5BX5KSTZQR"
 };
 
 const app = initializeApp(firebaseConfig);
