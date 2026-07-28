@@ -1,7 +1,7 @@
 // js/firebase-config.js
 
 // 將設定檔匯出 (export)，讓其他程式可以讀取
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAjCvMLiZmEUEgfqjXAHSFBuKHk9Uyrfkw",
   authDomain: "real-estate-case-management.firebaseapp.com",
   projectId: "real-estate-case-management",
