@@ -146,9 +146,9 @@ window.app = {
         container.innerHTML = filtered.map(item => `
             <div class="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md bg-white flex flex-col">
                 ${item.photos && item.photos.length > 0 
-                    ? `<div class="h-48 overflow-hidden relative"><img crossorigin="anonymous" src="${item.photos[0]}" class="w-full h-full object-cover"></div>` 
-                    : `<div class="h-20 bg-blue-50 flex items-center justify-center"><i class="fas fa-home text-3xl text-blue-200"></i></div>`
-                }
+                ? `<div class="h-48 overflow-hidden relative"><img src="${item.photos[0]}" class="w-full h-full object-cover"></div>` 
+                : `<div class="h-20 bg-blue-50 flex items-center justify-center"><i class="fas fa-home text-3xl text-blue-200"></i></div>`
+                }           
                 <div class="p-5 flex-grow">
                     <h3 class="text-lg font-bold">${item.name}</h3>
                     <p class="text-sm text-gray-500 mb-2">${item.region} | 總價: <span class="text-red-600 font-bold">${item.totalPrice}萬</span></p>
