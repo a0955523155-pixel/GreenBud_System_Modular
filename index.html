@@ -12,6 +12,11 @@
         body { font-family: '微軟正黑體', sans-serif; }
         .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 9999; justify-content: center; align-items: center; }
         #loginScreen { position: fixed; inset: 0; background: #f3f4f6; z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen p-4 md:p-8 text-gray-800">
@@ -77,7 +82,72 @@
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-1">
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-8">
+                    <div id="formHeader" class="p-5 border-b flex justify-between items-center bg-blue-50/50 border-blue-100">
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-blue-900" id="formTitle">
+                            <i class="fas fa-plus"></i> 新增案件資料
+                        </h2>
+                        <button id="cancelEditBtn" onclick="window.app.cancelEdit()" class="hidden text-sm text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200">
+                            取消編輯
+                        </button>
                     </div>
+                    
+                    <form id="caseForm" onsubmit="window.app.saveCase(event)" class="p-5 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+                        <input type="hidden" id="editId">
+                        
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><i class="fas fa-file-alt text-blue-500"></i> 基本資料</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">案名 <span class="text-red-500">*</span></label><input type="text" id="c_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">進件日期</label><input type="date" id="c_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">專員</label><input type="text" id="c_agent" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">區域</label><input type="text" id="c_region" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">門牌號碼</label><input type="text" id="c_address" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><i class="fas fa-map-marker-alt text-blue-500"></i> 土地與建物資訊</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">地籍資料</label><input type="text" id="c_cadastral" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">分區</label><input type="text" id="c_zoning" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">使用狀況</label><input type="text" id="c_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">地坪 (坪)</label><input type="number" step="0.01" id="c_landArea" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">建坪 (坪)</label><input type="number" step="0.01" id="c_buildArea" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">面寬 (米)</label><input type="number" step="0.01" id="c_width" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">縱深 (米)</label><input type="number" step="0.01" id="c_depth" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">建照號碼</label><input type="text" id="c_buildLicense" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">使照號碼</label><input type="text" id="c_useLicense" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2">價格資訊</h3>
+                            <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">土地單價 (萬)</label><input type="number" step="0.01" id="c_unitPrice" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">總價 (萬)</label><input type="number" step="0.01" id="c_totalPrice" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none font-bold text-red-600"></div>
+                            </div>
+                        </div>
+
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea id="c_notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none resize-none"></textarea></div>
+
+                        <div class="space-y-5 border-t pt-4">
+                            <div id="existingFilesContainer"></div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-image"></i> 照片上傳 (可多選)</label>
+                                <input type="file" id="c_photos" accept="image/*" multiple class="w-full text-sm border p-2 rounded-lg bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-file-pdf"></i> PDF 上傳 (可多選)</label>
+                                <input type="file" id="c_pdfs" accept="application/pdf" multiple class="w-full text-sm border p-2 rounded-lg bg-gray-50">
+                            </div>
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-blue-600 hover:bg-blue-700">
+                            <i class="fas fa-save"></i> 儲存並新增至總表
+                        </button>
+                    </form>
+                </div>
             </div>
             
             <div class="lg:col-span-2">
