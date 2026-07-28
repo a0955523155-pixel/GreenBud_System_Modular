@@ -3,7 +3,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs, doc, setDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
-// 新增引入 Auth 模組
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -21,10 +20,13 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
 
+// 全域變數
 let casesData = [];
 let currentUserEmail = null;
+let currentExistingPhotos = [];
+let currentExistingPdfs = []; 
 
-// 定義管理員帳號 (只有這些人能看紀錄)
+// 管理員帳號 (只有這些人能看紀錄，請改成您自己的 Email)
 const ADMIN_EMAILS = ['admin@green.com', 'boss@green.com'];
 
 // 監聽登入狀態
@@ -35,12 +37,10 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById('mainContent').style.display = 'block';
         document.getElementById('currentUser').innerText = currentUserEmail;
         
-        // 判斷是否為管理員
         if(ADMIN_EMAILS.includes(currentUserEmail)) {
             document.getElementById('adminLogBtn').classList.remove('hidden');
         }
         
-        // 紀錄登入
         window.app.logAction('登入系統', '使用者登入成功');
         window.app.loadCases();
     } else {
@@ -49,7 +49,7 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-// 上傳檔案功能 (同前)
+// 上傳檔案至 Firebase
 async function uploadFileToFirebase(file, folderName) {
     const fileRef = ref(storage, `${folderName}/${Date.now()}_${file.name}`);
     await uploadBytes(fileRef, file);
@@ -57,7 +57,7 @@ async function uploadFileToFirebase(file, folderName) {
 }
 
 window.app = {
-    // 登入
+    // ---------------- 系統與登入功能 ----------------
     login: async function(e) {
         e.preventDefault();
         const email = document.getElementById('loginEmail').value;
@@ -71,10 +71,8 @@ window.app = {
         document.getElementById('loading').style.display = 'none';
     },
 
-    // 登出
     logout: function() { signOut(auth); },
 
-    // 紀錄稽核 Log
     logAction: async function(actionType, targetCaseName) {
         try {
             await addDoc(collection(db, "audit_logs"), {
@@ -86,7 +84,6 @@ window.app = {
         } catch(e) { console.error("紀錄失敗", e); }
     },
 
-    // 查看紀錄 (管理員功能)
     viewLogs: async function() {
         document.getElementById('loading').style.display = 'flex';
         const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
@@ -102,7 +99,7 @@ window.app = {
         document.getElementById('loading').style.display = 'none';
     },
 
-    // 讀取案件，並自動萃取「區域」與「屬性」填入篩選器
+    // ---------------- 資料讀取與顯示 ----------------
     loadCases: async function() {
         document.getElementById('loading').style.display = 'flex';
         try {
@@ -118,7 +115,6 @@ window.app = {
                 if(data.zoning) zonings.add(data.zoning);
             });
             
-            // 更新篩選器下拉選單
             const regionSelect = document.getElementById('filterRegion');
             regionSelect.innerHTML = '<option value="">全部區域</option>' + [...regions].map(r => `<option value="${r}">${r}</option>`).join('');
             
@@ -130,7 +126,6 @@ window.app = {
         finally { document.getElementById('loading').style.display = 'none'; }
     },
 
-    // 591 概念進階篩選與渲染
     renderCases: function() {
         const keyword = document.getElementById('filterKeyword').value.toLowerCase();
         const fRegion = document.getElementById('filterRegion').value;
@@ -154,7 +149,6 @@ window.app = {
             container.innerHTML = `<div class="col-span-full text-center py-10 text-gray-400">找不到符合條件的案件</div>`; return;
         }
 
-        // 產生卡片，加入 Google Map iframe 按鈕或直接顯示
         container.innerHTML = filtered.map(item => `
             <div class="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md bg-white flex flex-col">
                 ${item.photos && item.photos.length > 0 
@@ -164,9 +158,21 @@ window.app = {
                 <div class="p-5 flex-grow">
                     <h3 class="text-lg font-bold">${item.name}</h3>
                     <p class="text-sm text-gray-500 mb-2">${item.region} | 總價: <span class="text-red-600 font-bold">${item.totalPrice}萬</span></p>
-                    <div class="flex gap-2">
-                        <button onclick='window.app.exportSinglePDF(${JSON.stringify(item).replace(/'/g, "&#39;")})' class="bg-red-50 text-red-600 px-3 py-1 rounded text-sm border"><i class="fas fa-file-pdf"></i> 匯出PDF(含地圖)</button>
-                        <button onclick='window.app.exportSingleExcel(${JSON.stringify(item).replace(/'/g, "&#39;")})' class="bg-green-50 text-green-600 px-3 py-1 rounded text-sm border"><i class="fas fa-file-excel"></i> 匯出Excel</button>
+                    
+                    <div class="flex gap-1 bg-gray-50 p-1 rounded-lg border border-gray-100 mb-3 justify-center">
+                        <button onclick='window.app.exportSingleExcel(${JSON.stringify(item).replace(/'/g, "&#39;")})' class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="匯出 Excel"><i class="fas fa-file-excel"></i></button>
+                        <button onclick='window.app.exportSinglePDF(${JSON.stringify(item).replace(/'/g, "&#39;")})' class="p-1.5 text-rose-500 hover:bg-rose-100 rounded" title="匯出 PDF"><i class="fas fa-file-pdf"></i></button>
+                        <div class="w-px bg-gray-200 mx-1"></div>
+                        <button onclick='window.app.editCase("${item.id}")' class="p-1.5 text-blue-500 hover:bg-blue-100 rounded" title="編輯"><i class="fas fa-edit"></i></button>
+                        <button onclick='window.app.deleteCase("${item.id}")' class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded" title="刪除"><i class="fas fa-trash"></i></button>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-3 mt-3 text-sm text-gray-600 bg-gray-50/70 p-3 rounded-xl border border-gray-100 flex-grow">
+                        <div><span class="text-xs text-gray-400 block">總價</span><span class="font-bold text-red-600">${item.totalPrice ? item.totalPrice + ' 萬' : '-'}</span></div>
+                        <div><span class="text-xs text-gray-400 block">單價</span><span>${item.unitPrice || '-'}</span></div>
+                        <div><span class="text-xs text-gray-400 block">地坪 / 建坪</span><span>${item.landArea || '-'} / ${item.buildArea || '-'}</span></div>
+                        <div><span class="text-xs text-gray-400 block">面寬 / 縱深</span><span>${item.width || '-'} / ${item.depth || '-'}</span></div>
+                        <div class="col-span-2"><span class="text-xs text-gray-400 block">門牌號碼</span><span class="break-all">${item.address || '-'}</span></div>
                     </div>
                 </div>
             </div>
@@ -182,14 +188,196 @@ window.app = {
         this.renderCases();
     },
 
-    // 解決 PDF 照片出不來，並自動嵌入 Google 門牌地圖
-    exportSinglePDF: function(c) {
-        // 紀錄匯出行為
-        this.logAction('匯出 PDF', c.name);
+    // ---------------- 新增、修改與刪除功能 ----------------
+    saveCase: async function(event) {
+        event.preventDefault();
+        document.getElementById('loading').style.display = 'flex';
+
+        try {
+            const editId = document.getElementById('editId').value;
+            
+            const caseData = {
+                date: document.getElementById('c_date').value,
+                region: document.getElementById('c_region').value,
+                name: document.getElementById('c_name').value,
+                cadastral: document.getElementById('c_cadastral').value,
+                zoning: document.getElementById('c_zoning').value,
+                status: document.getElementById('c_status').value,
+                address: document.getElementById('c_address').value,
+                landArea: document.getElementById('c_landArea').value,
+                buildArea: document.getElementById('c_buildArea').value,
+                unitPrice: document.getElementById('c_unitPrice').value,
+                width: document.getElementById('c_width').value,
+                depth: document.getElementById('c_depth').value,
+                totalPrice: document.getElementById('c_totalPrice').value,
+                buildLicense: document.getElementById('c_buildLicense').value,
+                useLicense: document.getElementById('c_useLicense').value,
+                agent: document.getElementById('c_agent').value,
+                notes: document.getElementById('c_notes').value,
+                photos: [...currentExistingPhotos],
+                pdfs: [...currentExistingPdfs],
+                updatedBy: currentUserEmail
+            };
+
+            const photoInput = document.getElementById('c_photos');
+            if (photoInput.files.length > 0) {
+                for (let file of photoInput.files) {
+                    const url = await uploadFileToFirebase(file, 'photos');
+                    caseData.photos.push(url);
+                }
+            }
+
+            const pdfInput = document.getElementById('c_pdfs');
+            if (pdfInput.files.length > 0) {
+                for (let file of pdfInput.files) {
+                    const url = await uploadFileToFirebase(file, 'pdfs');
+                    caseData.pdfs.push({ name: file.name, url: url });
+                }
+            }
+
+            if (editId) {
+                await setDoc(doc(db, "cases", editId), caseData, { merge: true });
+                this.logAction('編輯案件', caseData.name);
+                alert('案件資料已更新！');
+            } else {
+                caseData.createdAt = Date.now();
+                caseData.createdBy = currentUserEmail;
+                await addDoc(collection(db, "cases"), caseData);
+                this.logAction('新增案件', caseData.name);
+                alert('案件資料已新增！');
+            }
+
+            this.cancelEdit();
+            await this.loadCases();
+
+        } catch (error) {
+            console.error('儲存失敗:', error);
+            alert('儲存發生錯誤。');
+        } finally {
+            document.getElementById('loading').style.display = 'none';
+        }
+    },
+
+    editCase: function(id) {
+        const item = casesData.find(c => c.id === id);
+        if (!item) return;
+
+        document.getElementById('editId').value = item.id;
+        document.getElementById('c_date').value = item.date || '';
+        document.getElementById('c_region').value = item.region || '';
+        document.getElementById('c_name').value = item.name || '';
+        document.getElementById('c_cadastral').value = item.cadastral || '';
+        document.getElementById('c_zoning').value = item.zoning || '';
+        document.getElementById('c_status').value = item.status || '';
+        document.getElementById('c_address').value = item.address || '';
+        document.getElementById('c_landArea').value = item.landArea || '';
+        document.getElementById('c_buildArea').value = item.buildArea || '';
+        document.getElementById('c_unitPrice').value = item.unitPrice || '';
+        document.getElementById('c_width').value = item.width || '';
+        document.getElementById('c_depth').value = item.depth || '';
+        document.getElementById('c_totalPrice').value = item.totalPrice || '';
+        document.getElementById('c_buildLicense').value = item.buildLicense || '';
+        document.getElementById('c_useLicense').value = item.useLicense || '';
+        document.getElementById('c_agent').value = item.agent || '';
+        document.getElementById('c_notes').value = item.notes || '';
+
+        currentExistingPhotos = item.photos ? [...item.photos] : [];
+        currentExistingPdfs = item.pdfs ? [...item.pdfs] : [];
+        this.renderExistingFilesUI();
+
+        document.getElementById('formTitle').innerHTML = '<i class="fas fa-edit"></i> 編輯案件資料';
+        document.getElementById('formHeader').classList.replace('bg-blue-50/50', 'bg-amber-50');
+        document.getElementById('formHeader').classList.replace('border-blue-100', 'border-amber-100');
+        document.getElementById('formTitle').classList.replace('text-blue-900', 'text-amber-900');
         
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<i class="fas fa-save"></i> 更新案件資料';
+        btn.className = 'w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-amber-500 hover:bg-amber-600';
+        document.getElementById('cancelEditBtn').classList.remove('hidden');
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    cancelEdit: function() {
+        document.getElementById('caseForm').reset();
+        document.getElementById('editId').value = '';
+        currentExistingPhotos = [];
+        currentExistingPdfs = [];
+        const container = document.getElementById('existingFilesContainer');
+        if (container) container.innerHTML = '';
+
+        document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus"></i> 新增案件資料';
+        document.getElementById('formHeader').classList.replace('bg-amber-50', 'bg-blue-50/50');
+        document.getElementById('formHeader').classList.replace('border-amber-100', 'border-blue-100');
+        document.getElementById('formTitle').classList.replace('text-amber-900', 'text-blue-900');
+        
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<i class="fas fa-save"></i> 儲存並新增至總表';
+        btn.className = 'w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-blue-600 hover:bg-blue-700';
+        document.getElementById('cancelEditBtn').classList.add('hidden');
+    },
+
+    deleteCase: async function(id) {
+        if (confirm('警告：確定要刪除這筆案件嗎？')) {
+            const item = casesData.find(c => c.id === id);
+            document.getElementById('loading').style.display = 'flex';
+            try {
+                await deleteDoc(doc(db, "cases", id));
+                this.logAction('刪除案件', item ? item.name : id);
+                alert('案件已成功刪除');
+                await this.loadCases();
+            } catch (err) {
+                alert('刪除失敗，請檢查權限與連線。');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+    },
+
+    renderExistingFilesUI: function() {
+        let container = document.getElementById('existingFilesContainer');
+        if (!container) {
+            const photoInput = document.getElementById('c_photos');
+            container = document.createElement('div');
+            container.id = 'existingFilesContainer';
+            photoInput.parentNode.insertBefore(container, photoInput);
+        }
+
+        if (currentExistingPhotos.length === 0 && currentExistingPdfs.length === 0) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="my-4 p-3 border rounded-xl bg-gray-50 border-gray-200">
+                <p class="text-xs font-semibold text-gray-600 mb-2">已上傳的檔案 (點擊 X 刪除)：</p>
+                <div class="flex flex-wrap gap-3">
+                    ${currentExistingPhotos.map((url, idx) => `
+                        <div class="relative group w-16 h-16 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <img src="${url}" class="w-full h-full object-cover">
+                            <button type="button" onclick="window.app.removeExistingPhoto(${idx})" class="absolute top-0 right-0 bg-red-600 text-white p-1 text-xs hover:bg-red-700 opacity-90"><i class="fas fa-times"></i></button>
+                        </div>
+                    `).join('')}
+                    ${currentExistingPdfs.map((pdf, idx) => `
+                        <div class="relative group h-16 px-2 border border-gray-200 rounded-lg bg-white flex flex-col items-center justify-center text-center max-w-[80px]">
+                            <i class="fas fa-file-pdf text-red-500 text-xl mb-1"></i>
+                            <span class="text-[10px] text-gray-500 truncate w-full" title="${pdf.name}">${pdf.name}</span>
+                            <button type="button" onclick="window.app.removeExistingPdf(${idx})" class="absolute top-0 right-0 bg-red-600 text-white p-1 text-xs hover:bg-red-700 opacity-90"><i class="fas fa-times"></i></button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    },
+
+    removeExistingPhoto: function(index) { currentExistingPhotos.splice(index, 1); this.renderExistingFilesUI(); },
+    removeExistingPdf: function(index) { currentExistingPdfs.splice(index, 1); this.renderExistingFilesUI(); },
+
+    // ---------------- 匯出功能 ----------------
+    exportSinglePDF: function(c) {
+        this.logAction('匯出 PDF', c.name);
         document.getElementById('loading').style.display = 'flex';
         
-        // 製作要列印的 HTML，加入 crossOrigin 解決圖片問題，並加入自動門牌地圖
         const element = document.createElement('div');
         element.innerHTML = `
             <div style="font-family: 'Microsoft JhengHei', sans-serif; padding: 20px;">
@@ -226,7 +414,6 @@ window.app = {
             </div>
         `;
 
-        // html2pdf 核心設定：必須開啟 useCORS
         const opt = {
             margin:       10,
             filename:     `${c.name}_案件資料表.pdf`,
@@ -242,7 +429,20 @@ window.app = {
 
     exportSingleExcel: function(c) {
         this.logAction('匯出 Excel', c.name);
-        // (此處保留原先的 Excel 匯出邏輯即可)
-        alert('匯出 Excel 並已紀錄於管理員日誌！');
+        const fields = [
+            ['欄位', '內容'],
+            ['案名', c.name], ['進件日期', c.date], ['區域', c.region], ['門牌號碼', c.address],
+            ['地籍資料', c.cadastral], ['分區', c.zoning], ['使用狀況', c.status],
+            ['地坪(坪)', c.landArea], ['建坪(坪)', c.buildArea], ['土地面寬(米)', c.width], ['縱深(米)', c.depth],
+            ['建照號碼', c.buildLicense], ['使照號碼', c.useLicense],
+            ['土地單價', c.unitPrice], ['總價(萬)', c.totalPrice], ['專員', c.agent], ['備註', c.notes]
+        ];
+        
+        let csvContent = '\uFEFF' + fields.map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${c.name || '案件資料'}_詳細資料.csv`;
+        link.click();
     }
 };
