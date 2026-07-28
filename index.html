@@ -5,166 +5,136 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>綠芽團隊 - 不動產案件總表管理系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: '微軟正黑體', sans-serif; }
+        .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 50; justify-content: center; align-items: center; }
+        /* 自訂滾動條 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 </head>
-<body class="bg-gray-100 p-4 md:p-6 font-sans text-gray-800">
-
-    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 hidden justify-center items-center z-50">
-        <div class="bg-white p-5 rounded-xl shadow-lg flex flex-col items-center">
-            <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-3"></i>
-            <p id="loadingText" class="text-gray-700 font-bold">資料雲端同步中...</p>
+<body class="bg-gray-50 min-h-screen p-4 md:p-8 text-gray-800">
+    <div id="loading" class="loading-overlay">
+        <div class="text-xl font-bold text-blue-600 flex items-center gap-3">
+            <i class="fas fa-spinner fa-spin"></i> 資料處理中，請稍候...
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6">
-        
-        <div class="w-full lg:w-1/3 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit transition-colors duration-300" id="formContainer">
-            <div class="flex justify-between items-center mb-4 border-b pb-3">
-                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2" id="formTitle">
-                    <i class="fas fa-plus-circle text-blue-600"></i>新增案件資料
-                </h2>
-                <button type="button" class="text-sm text-gray-500 hover:text-gray-700 bg-gray-100 px-2.5 py-1 rounded-lg border hidden" id="cancelEditBtn">
-                    取消編輯
-                </button>
+    <div class="max-w-7xl mx-auto space-y-8">
+        <header class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 p-3 rounded-xl"><i class="fas fa-home text-white text-xl"></i></div>
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">不動產案件總表系統</h1>
+                    <p class="text-sm text-gray-500">案件建檔、照片管理與資料維護</p>
+                </div>
             </div>
-            
-            <form id="caseForm" class="space-y-4">
-                <input type="hidden" id="caseId">
-                
-                <div class="space-y-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">案名 <span class="text-red-500">*</span></label>
-                        <input type="text" id="caseName" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" required placeholder="請輸入案名">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">進件日期</label>
-                            <input type="date" id="date" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">專員</label>
-                            <input type="text" id="agent" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="承辦人">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">區域</label>
-                        <input type="text" id="area" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：信義區、台中市西屯區">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">門牌號碼</label>
-                        <input type="text" id="address" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="完整地址">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">地坪 (坪)</label>
-                            <input type="number" step="0.01" id="landArea" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">建坪 (坪)</label>
-                            <input type="number" step="0.01" id="buildArea" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">土地單價 (萬/坪)</label>
-                            <input type="number" step="0.01" id="unitPrice" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">總價 (萬)</label>
-                            <input type="number" step="0.01" id="totalPrice" class="w-full border border-gray-300 rounded-lg p-2 text-sm font-bold text-red-600 focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">土地面寬 (米)</label>
-                            <input type="number" step="0.01" id="width" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">縱深 (米)</label>
-                            <input type="number" step="0.01" id="depth" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">地籍資料</label>
-                        <input type="text" id="cadastral" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="段號、建號等">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">分區</label>
-                            <input type="text" id="zone" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="住宅區">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">使用狀況</label>
-                            <input type="text" id="usage" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="空地、出租">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">建照號碼</label>
-                        <input type="text" id="buildLicense" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="請輸入建照號碼">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">使照號碼</label>
-                        <input type="text" id="useLicense" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="請輸入使照號碼">
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">備註</label>
-                        <textarea id="notes" rows="2" class="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"></textarea>
-                    </div>
-                </div>
-
-                <div class="border-t pt-4 space-y-3">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-blue-500 mr-1"></i>上傳案件照片</label>
-                        <input type="file" id="photoUpload" accept="image/*" multiple class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-file-pdf text-red-500 mr-1"></i>上傳相關文件 (PDF)</label>
-                        <input type="file" id="pdfUpload" accept=".pdf" multiple class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
-                    </div>
-                </div>
-
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium p-3 rounded-xl shadow-sm transition-all" id="submitBtn">
-                    儲存並新增至總表
-                </button>
-            </form>
-        </div>
-
-        <div class="w-full lg:w-2/3 flex flex-col space-y-4">
-            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="flex items-center gap-3">
-                    <h2 class="text-xl font-bold text-gray-800">案件列表</h2>
-                    <span id="caseCountBadge" class="bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full">共 0 筆</span>
-                </div>
-                <div class="flex flex-wrap gap-2 items-center w-full md:w-auto">
-                    <div class="relative flex-grow md:w-60">
-                        <input type="text" id="searchInput" placeholder="搜尋案名、區域、專員..." class="w-full border border-gray-300 rounded-lg py-2 px-3 pl-9 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                        <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
-                    </div>
-                    <button id="exportTotalExcel" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center gap-1">
-                        <i class="fas fa-file-excel"></i> 總表Excel
+            <div class="flex items-center gap-6">
+                <div class="hidden lg:flex gap-3">
+                    <button onclick="window.app.exportToExcel()" class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
+                        <i class="fas fa-download"></i> 匯出總表 Excel
                     </button>
-                    <button id="exportTotalPDF" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center gap-1">
-                        <i class="fas fa-file-pdf"></i> 總表PDF
+                    <button onclick="window.app.exportToPDF()" class="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm">
+                        <i class="fas fa-print"></i> 匯出總表 PDF
                     </button>
+                </div>
+                <div class="text-right hidden md:block border-l pl-6 border-gray-100">
+                    <p class="text-sm text-gray-500">目前總案件數</p>
+                    <p id="totalCount" class="text-2xl font-bold text-blue-600">0</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-8">
+                    <div id="formHeader" class="p-5 border-b flex justify-between items-center bg-blue-50/50 border-blue-100">
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-blue-900" id="formTitle">
+                            <i class="fas fa-plus"></i> 新增案件資料
+                        </h2>
+                        <button id="cancelEditBtn" onclick="window.app.cancelEdit()" class="hidden text-sm text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200">
+                            取消編輯
+                        </button>
+                    </div>
+                    
+                    <form id="caseForm" onsubmit="window.app.saveCase(event)" class="p-5 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+                        <input type="hidden" id="editId">
+                        
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><i class="fas fa-file-alt text-blue-500"></i> 基本資料</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">案名 <span class="text-red-500">*</span></label><input type="text" id="c_name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-blue-500"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">進件日期</label><input type="date" id="c_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">專員</label><input type="text" id="c_agent" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">區域</label><input type="text" id="c_region" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">門牌號碼</label><input type="text" id="c_address" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2 flex items-center gap-2"><i class="fas fa-map-marker-alt text-blue-500"></i> 土地與建物資訊</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">地籍資料</label><input type="text" id="c_cadastral" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">分區</label><input type="text" id="c_zoning" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">使用狀況</label><input type="text" id="c_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">地坪 (坪)</label><input type="number" step="0.01" id="c_landArea" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">建坪 (坪)</label><input type="number" step="0.01" id="c_buildArea" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">面寬 (米)</label><input type="number" step="0.01" id="c_width" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">縱深 (米)</label><input type="number" step="0.01" id="c_depth" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">建照號碼</label><input type="text" id="c_buildLicense" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">使照號碼</label><input type="text" id="c_useLicense" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <h3 class="text-sm font-semibold text-gray-900 border-b pb-2">價格資訊</h3>
+                            <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">土地單價 (萬)</label><input type="number" step="0.01" id="c_unitPrice" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">總價 (萬)</label><input type="number" step="0.01" id="c_totalPrice" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none font-bold text-red-600"></div>
+                            </div>
+                        </div>
+
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea id="c_notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none resize-none"></textarea></div>
+
+                        <div class="space-y-5 border-t pt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-image"></i> 照片上傳 (可多選)</label>
+                                <input type="file" id="c_photos" accept="image/*" multiple class="w-full text-sm border p-2 rounded-lg bg-gray-50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-file-pdf"></i> PDF 上傳 (可多選)</label>
+                                <input type="file" id="c_pdfs" accept="application/pdf" multiple class="w-full text-sm border p-2 rounded-lg bg-gray-50">
+                            </div>
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-blue-600 hover:bg-blue-700">
+                            <i class="fas fa-save"></i> 儲存並新增至總表
+                        </button>
+                    </form>
                 </div>
             </div>
 
-            <div id="caseList" class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto" style="max-height: 80vh;">
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-[calc(100vh-160px)] flex flex-col">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <h2 class="text-xl font-bold text-gray-800">案件列表</h2>
+                        <div class="relative w-full md:w-64">
+                            <input type="text" id="searchInput" onkeyup="window.app.renderCases()" placeholder="搜尋案名、區域..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg outline-none text-sm">
+                            <i class="fas fa-search text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        </div>
+                    </div>
+                    <div id="casesList" class="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 content-start">
+                        </div>
                 </div>
+            </div>
         </div>
     </div>
-
-    <script src="js/main.js"></script>
+    
+    <script type="module" src="./js/main.js"></script>
 </body>
 </html>
