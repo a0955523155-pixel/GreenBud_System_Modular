@@ -11,7 +11,7 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
 
-// 🌟 全台灣縣市與鄉鎮市區完整資料庫 (簡化列出主要縣市與全區)
+// 🌟 全台灣縣市與鄉鎮市區資料庫
 const TAIWAN_REGIONS = {
     "台北市": ["中正區","大安區","中山區","信義區","松山區","士林區","北投區","內湖區","南港區","文山區","萬華區","大同區"],
     "新北市": ["板橋區","新莊區","中和區","永和區","三重區","新店區","土城區","蘆洲區","汐止區","樹林區","淡水區","三峽區","鶯歌區","瑞芳區","五股區","泰山區","林口區","深坑區","石碇區","坪林區","三芝區","石門區","八里區","平溪區","雙溪區","貢寮區","金山區","萬里區","烏來區"],
@@ -37,12 +37,12 @@ const TAIWAN_REGIONS = {
     "連江縣": ["南竿鄉","北竿鄉","莒光鄉","東引鄉"]
 };
 
-// 🌟 不動產類型與土地分區完整分類 (591概念)
+// 🌟 不動產屬性/分區分類
 const ZONING_CATEGORIES = {
     "住宅類": ["電梯大樓", "透天/別墅", "華廈", "公寓", "套房"],
     "商業與辦公": ["店面", "辦公室/廠辦", "飯店/旅宿"],
     "工廠/倉庫": ["工業廠房", "廠辦", "倉庫/物流"],
-    "土地分類": ["住宅區土地", "商業區土地", "工業區土地", "農業區/農地", "建地", "建照地", "林地/山坡地", "特定專用區", "公共設施用地"]
+    "土地分類": ["住宅區土地", "商業區土地", "工業區土地", "農業區/農地", "建地", "特定專用區", "公共設施用地"]
 };
 
 let casesData = [];
@@ -50,14 +50,16 @@ let currentUserEmail = null;
 let currentExistingPhotos = [];
 let currentExistingPdfs = []; 
 
-// 複選狀態陣列
+// 篩選器狀態
+let activeCityTab = "高雄市"; // 預設開啟高雄市
 let selectedRegionsTemp = [];
 let selectedRegionsConfirmed = [];
 let selectedZoningsTemp = [];
 let selectedZoningsConfirmed = [];
 
-const ADMIN_EMAILS = ['a0955523155@gmail.com', 'boss@green.com']; // 請改成您的管理員 Email
+const ADMIN_EMAILS = ['a0955523155@gmail.com', 'boss@green.com'];
 
+// 登入驗證
 onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUserEmail = user.email;
@@ -66,10 +68,10 @@ onAuthStateChanged(auth, (user) => {
         document.getElementById('currentUser').innerText = currentUserEmail;
         
         if(ADMIN_EMAILS.includes(currentUserEmail)) {
-            document.getElementById('adminLogBtn').classList.remove('hidden');
+            document.getElementById('nav-log-btn').classList.remove('hidden');
         }
         
-        window.app.logAction('登入系統', '成功登入');
+        window.app.initFormDropdowns(); // 初始化表單下拉選單
         window.app.loadCases();
     } else {
         document.getElementById('loginScreen').style.display = 'flex';
@@ -84,6 +86,29 @@ async function uploadFileToFirebase(file, folderName) {
 }
 
 window.app = {
+    // ---------------- 導覽與系統功能 ----------------
+    // 🌟 切換頁面 (Tab) 功能
+    switchPage: function(pageId) {
+        // 隱藏所有頁面
+        document.querySelectorAll('.page-view').forEach(el => el.classList.remove('active'));
+        // 移除所有 Tab 的 active 樣式
+        document.querySelectorAll('.tab-btn').forEach(el => {
+            el.classList.remove('active', 'border-green-600', 'font-bold', 'text-green-600');
+        });
+        
+        // 顯示指定的頁面與標亮對應 Tab
+        document.getElementById(`page-${pageId}`).classList.add('active');
+        const activeTab = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.getAttribute('onclick').includes(pageId));
+        if(activeTab) {
+            activeTab.classList.add('active', 'border-green-600', 'font-bold', 'text-green-600');
+        }
+
+        // 如果切換到紀錄頁，自動載入資料
+        if(pageId === 'log') {
+            this.loadLogs();
+        }
+    },
+
     login: async function(e) {
         e.preventDefault();
         const email = document.getElementById('loginEmail').value;
@@ -91,9 +116,8 @@ window.app = {
         document.getElementById('loading').style.display = 'flex';
         try {
             await signInWithEmailAndPassword(auth, email, pwd);
-        } catch (error) {
-            alert('登入失敗，請檢查帳號密碼。');
-        }
+            this.logAction('登入系統', '成功登入');
+        } catch (error) { alert('登入失敗，請檢查帳號密碼。'); }
         document.getElementById('loading').style.display = 'none';
     },
 
@@ -110,117 +134,170 @@ window.app = {
         } catch(e) { console.error("紀錄失敗", e); }
     },
 
-    viewLogs: async function() {
+    loadLogs: async function() {
         document.getElementById('loading').style.display = 'flex';
         const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
         const snapshot = await getDocs(q);
         let logHtml = '<ul class="divide-y">';
         snapshot.forEach(doc => {
             const d = doc.data();
-            logHtml += `<li class="py-2"><span class="text-gray-500">${d.timestamp}</span> - <span class="font-bold text-blue-600">${d.user}</span> 執行了 <span class="text-red-500">[${d.action}]</span> : ${d.target}</li>`;
+            logHtml += `<li class="py-3"><span class="text-gray-400 text-xs w-32 inline-block">${d.timestamp}</span> <span class="font-bold text-green-700">${d.user}</span> 執行 <span class="text-blue-600 px-2 bg-blue-50 rounded text-xs mx-1">${d.action}</span> ➔ ${d.target}</li>`;
         });
         logHtml += '</ul>';
         document.getElementById('logContent').innerHTML = logHtml;
-        document.getElementById('logModal').classList.remove('hidden');
         document.getElementById('loading').style.display = 'none';
     },
 
-    loadCases: async function() {
-        document.getElementById('loading').style.display = 'flex';
-        try {
-            const querySnapshot = await getDocs(collection(db, "cases"));
-            casesData = [];
-            querySnapshot.forEach((doc) => {
-                casesData.push({ id: doc.id, ...doc.data() });
-            });
-            this.renderCases();
-        } catch (error) { console.error(error); } 
-        finally { document.getElementById('loading').style.display = 'none'; }
+    // ---------------- 🌟 左側新增表單：兩段式下拉選單 ----------------
+    initFormDropdowns: function() {
+        const citySelect = document.getElementById('c_city');
+        const zoningSelect = document.getElementById('c_zoning');
+        
+        // 填入縣市
+        citySelect.innerHTML = '<option value="">請選擇縣市</option>';
+        Object.keys(TAIWAN_REGIONS).forEach(city => {
+            citySelect.innerHTML += `<option value="${city}">${city}</option>`;
+        });
+
+        // 填入屬性分類
+        zoningSelect.innerHTML = '<option value="">請選擇屬性</option>';
+        for(const [cat, items] of Object.entries(ZONING_CATEGORIES)){
+            let optGroup = `<optgroup label="${cat}">`;
+            items.forEach(item => { optGroup += `<option value="${item}">${item}</option>`; });
+            optGroup += `</optgroup>`;
+            zoningSelect.innerHTML += optGroup;
+        }
     },
 
-    // 🌐 區域 Modal 邏輯
+    onCityChange: function() {
+        const city = document.getElementById('c_city').value;
+        const distSelect = document.getElementById('c_district');
+        distSelect.innerHTML = '<option value="">請選擇鄉鎮市區</option>';
+        
+        if(city && TAIWAN_REGIONS[city]) {
+            TAIWAN_REGIONS[city].forEach(dist => {
+                distSelect.innerHTML += `<option value="${dist}">${dist}</option>`;
+            });
+        }
+    },
+
+    // ---------------- 🌟 右側篩選器：雙層式區域選單 (Modal) ----------------
     openRegionModal: function() {
         selectedRegionsTemp = [...selectedRegionsConfirmed];
-        const body = document.getElementById('regionModalBody');
-        let html = '';
-
-        for (const [city, dists] of Object.entries(TAIWAN_REGIONS)) {
-            html += `<div class="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
-                <div class="font-bold text-gray-800 border-b pb-1 mb-2 flex items-center justify-between">
-                    <span>📍 ${city}</span>
-                    <button type="button" onclick="window.app.toggleCityAll('${city}')" class="text-xs text-blue-600 hover:underline">全選該縣市</button>
-                </div>
-                <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">`;
-            
-            dists.forEach(dist => {
-                const isChecked = selectedRegionsTemp.includes(dist) || selectedRegionsTemp.includes(city) || selectedRegionsTemp.includes(`${city}${dist}`);
-                html += `<label class="flex items-center gap-1.5 cursor-pointer bg-white p-1.5 rounded border hover:bg-green-50 text-xs">
-                    <input type="checkbox" value="${dist}" data-city="${city}" ${isChecked ? 'checked' : ''} onchange="window.app.handleRegionCheck(this)" class="accent-green-600">
-                    <span class="truncate">${dist}</span>
-                </label>`;
-            });
-            html += `</div></div>`;
-        }
-        body.innerHTML = html;
         document.getElementById('regionModal').classList.remove('hidden');
+        this.renderRegionModalUI();
     },
 
-    closeRegionModal: function() { document.getElementById('regionModal').classList.add('hidden'); },
+    renderRegionModalUI: function() {
+        const cityListDiv = document.getElementById('cityTabList');
+        const distListDiv = document.getElementById('districtCheckboxList');
+        
+        // 1. 渲染左側縣市按鈕
+        let cityHtml = '';
+        Object.keys(TAIWAN_REGIONS).forEach(city => {
+            const isActive = city === activeCityTab;
+            // 算一下這個縣市被勾了幾個
+            const dists = TAIWAN_REGIONS[city];
+            const checkedCount = dists.filter(d => selectedRegionsTemp.includes(`${city}${d}`)).length;
+            const badge = checkedCount > 0 ? `<span class="bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full ml-1">${checkedCount}</span>` : '';
+            
+            cityHtml += `
+                <button onclick="window.app.changeActiveCity('${city}')" class="w-full text-left p-3 text-sm border-b transition-colors ${isActive ? 'bg-white border-l-4 border-l-green-600 font-bold text-green-700' : 'text-gray-600 hover:bg-gray-100'}">
+                    ${city} ${badge}
+                </button>
+            `;
+        });
+        cityListDiv.innerHTML = cityHtml;
+
+        // 2. 渲染右側區域 Checkbox
+        const dists = TAIWAN_REGIONS[activeCityTab];
+        let distHtml = `
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h4 class="font-bold text-gray-800 text-lg">${activeCityTab}</h4>
+                <button onclick="window.app.toggleCityAllCheck('${activeCityTab}')" class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded">全選/取消全選</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        `;
+        
+        dists.forEach(dist => {
+            // 儲存時格式統一為 "縣市+區域" 避免同名區衝突
+            const fullRegionName = `${activeCityTab}${dist}`;
+            const isChecked = selectedRegionsTemp.includes(fullRegionName);
+            distHtml += `
+                <label class="flex items-center gap-2 cursor-pointer p-2 rounded-lg border hover:bg-green-50 transition-colors ${isChecked ? 'bg-green-50 border-green-200' : 'bg-white'}">
+                    <input type="checkbox" value="${fullRegionName}" ${isChecked ? 'checked' : ''} onchange="window.app.handleRegionCheck(this)" class="w-4 h-4 accent-green-600">
+                    <span>${dist}</span>
+                </label>
+            `;
+        });
+        distHtml += `</div>`;
+        distListDiv.innerHTML = distHtml;
+    },
+
+    changeActiveCity: function(city) {
+        activeCityTab = city;
+        this.renderRegionModalUI();
+    },
 
     handleRegionCheck: function(cb) {
-        const val = cb.value;
         if (cb.checked) {
-            if (!selectedRegionsTemp.includes(val)) selectedRegionsTemp.push(val);
+            if (!selectedRegionsTemp.includes(cb.value)) selectedRegionsTemp.push(cb.value);
         } else {
-            selectedRegionsTemp = selectedRegionsTemp.filter(r => r !== val);
+            selectedRegionsTemp = selectedRegionsTemp.filter(r => r !== cb.value);
         }
+        this.renderRegionModalUI(); // 更新左側數字 badge
     },
 
-    toggleCityAll: function(city) {
-        const dists = TAIWAN_REGIONS[city] || [];
-        const allChecked = dists.every(d => selectedRegionsTemp.includes(d));
-        dists.forEach(d => {
-            if (allChecked) {
-                selectedRegionsTemp = selectedRegionsTemp.filter(r => r !== d);
-            } else {
-                if (!selectedRegionsTemp.includes(d)) selectedRegionsTemp.push(d);
-            }
-        });
-        this.openRegionModal(); // 重新渲染 modal
+    toggleCityAllCheck: function(city) {
+        const dists = TAIWAN_REGIONS[city];
+        // 檢查是否已全選
+        const allChecked = dists.every(d => selectedRegionsTemp.includes(`${city}${d}`));
+        if (allChecked) {
+            // 取消全選
+            selectedRegionsTemp = selectedRegionsTemp.filter(r => !r.startsWith(city));
+        } else {
+            // 全選
+            dists.forEach(d => {
+                const fullName = `${city}${d}`;
+                if (!selectedRegionsTemp.includes(fullName)) selectedRegionsTemp.push(fullName);
+            });
+        }
+        this.renderRegionModalUI();
     },
 
     clearSelectedRegions: function() {
         selectedRegionsTemp = [];
-        this.openRegionModal();
+        this.renderRegionModalUI();
     },
 
     confirmRegionSelection: function() {
         selectedRegionsConfirmed = [...selectedRegionsTemp];
         const btnText = document.getElementById('selectedRegionText');
         if (selectedRegionsConfirmed.length === 0) {
-            btnText.innerText = "全部縣市/區域";
+            btnText.innerHTML = "全部縣市/區域";
         } else {
-            btnText.innerText = `已選 ${selectedRegionsConfirmed.length} 個區域: ${selectedRegionsConfirmed.join(', ')}`;
+            btnText.innerHTML = `<span class="text-green-700 font-bold">已選 ${selectedRegionsConfirmed.length} 個區域</span>`;
         }
         this.closeRegionModal();
         this.renderCases();
     },
+    closeRegionModal: function() { document.getElementById('regionModal').classList.add('hidden'); },
 
-    // 🏷️ 屬性 Modal 邏輯
+    // ---------------- 🏷️ 屬性 Modal 邏輯 ----------------
     openZoningModal: function() {
         selectedZoningsTemp = [...selectedZoningsConfirmed];
         const body = document.getElementById('zoningModalBody');
         let html = '';
 
         for (const [cat, items] of Object.entries(ZONING_CATEGORIES)) {
-            html += `<div class="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
-                <div class="font-bold text-gray-800 border-b pb-1 mb-2">🏷️ ${cat}</div>
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">`;
+            html += `<div class="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
+                <div class="font-bold text-gray-800 border-b pb-2 mb-3"><i class="fas fa-tags text-blue-500"></i> ${cat}</div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">`;
             
             items.forEach(item => {
                 const isChecked = selectedZoningsTemp.includes(item);
-                html += `<label class="flex items-center gap-1.5 cursor-pointer bg-white p-2 rounded border hover:bg-blue-50 text-xs">
-                    <input type="checkbox" value="${item}" ${isChecked ? 'checked' : ''} onchange="window.app.handleZoningCheck(this)" class="accent-blue-600">
+                html += `<label class="flex items-center gap-2 cursor-pointer bg-white p-2 rounded-lg border hover:bg-blue-50 transition-colors ${isChecked ? 'bg-blue-50 border-blue-200' : ''}">
+                    <input type="checkbox" value="${item}" ${isChecked ? 'checked' : ''} onchange="window.app.handleZoningCheck(this)" class="w-4 h-4 accent-blue-600">
                     <span>${item}</span>
                 </label>`;
             });
@@ -230,35 +307,33 @@ window.app = {
         document.getElementById('zoningModal').classList.remove('hidden');
     },
 
-    closeZoningModal: function() { document.getElementById('zoningModal').classList.add('hidden'); },
-
     handleZoningCheck: function(cb) {
-        const val = cb.value;
-        if (cb.checked) {
-            if (!selectedZoningsTemp.includes(val)) selectedZoningsTemp.push(val);
-        } else {
-            selectedZoningsTemp = selectedZoningsTemp.filter(z => z !== val);
-        }
+        if (cb.checked) { if (!selectedZoningsTemp.includes(cb.value)) selectedZoningsTemp.push(cb.value); } 
+        else { selectedZoningsTemp = selectedZoningsTemp.filter(z => z !== cb.value); }
     },
-
-    clearSelectedZonings: function() {
-        selectedZoningsTemp = [];
-        this.openZoningModal();
-    },
-
+    clearSelectedZonings: function() { selectedZoningsTemp = []; this.openZoningModal(); },
     confirmZoningSelection: function() {
         selectedZoningsConfirmed = [...selectedZoningsTemp];
         const btnText = document.getElementById('selectedZoningText');
-        if (selectedZoningsConfirmed.length === 0) {
-            btnText.innerText = "全部類型/分區";
-        } else {
-            btnText.innerText = `已選 ${selectedZoningsConfirmed.length} 個屬性: ${selectedZoningsConfirmed.join(', ')}`;
-        }
+        if (selectedZoningsConfirmed.length === 0) { btnText.innerText = "全部類型/分區"; } 
+        else { btnText.innerHTML = `<span class="text-blue-700 font-bold">已選 ${selectedZoningsConfirmed.length} 個屬性</span>`; }
         this.closeZoningModal();
         this.renderCases();
     },
+    closeZoningModal: function() { document.getElementById('zoningModal').classList.add('hidden'); },
 
-    // 591 概念過濾演算法
+    // ---------------- 載入與渲染資料 ----------------
+    loadCases: async function() {
+        document.getElementById('loading').style.display = 'flex';
+        try {
+            const querySnapshot = await getDocs(collection(db, "cases"));
+            casesData = [];
+            querySnapshot.forEach((doc) => { casesData.push({ id: doc.id, ...doc.data() }); });
+            this.renderCases();
+        } catch (error) { console.error(error); } 
+        finally { document.getElementById('loading').style.display = 'none'; }
+    },
+
     getFilteredCases: function() {
         const keyword = document.getElementById('filterKeyword').value.toLowerCase();
         const fMin = parseFloat(document.getElementById('filterPriceMin').value) || 0;
@@ -270,11 +345,11 @@ window.app = {
                              (c.address||'').toLowerCase().includes(keyword) ||
                              (c.agent||'').toLowerCase().includes(keyword);
 
-            // 區域多選比對 (若完全沒勾選視為「不限區域」)
+            // 區域比對 (若資料庫存的是 高雄市-鼓山區，或是只存 鼓山區)
+            const fullRegionStr = (c.region || '').replace(/\s|-/g, ''); // 去除空白或橫線
             const matchRegion = selectedRegionsConfirmed.length === 0 || 
-                                selectedRegionsConfirmed.some(reg => (c.region || '').includes(reg) || (c.address || '').includes(reg));
+                                selectedRegionsConfirmed.some(reg => fullRegionStr.includes(reg) || (c.address||'').includes(reg));
 
-            // 屬性多選比對 (若完全沒勾選視為「不限屬性」)
             const matchZoning = selectedZoningsConfirmed.length === 0 || 
                                 selectedZoningsConfirmed.some(zon => (c.zoning || '').includes(zon));
 
@@ -290,33 +365,33 @@ window.app = {
         document.getElementById('totalCount').innerText = filtered.length;
 
         if (filtered.length === 0) {
-            container.innerHTML = `<div class="col-span-full text-center py-12 text-gray-400"><i class="fas fa-search text-3xl mb-2"></i><p>找不到符合條件的案件</p></div>`; 
+            container.innerHTML = `<div class="col-span-full text-center py-16 text-gray-400"><i class="fas fa-search text-4xl mb-3"></i><p class="text-lg">找不到符合條件的案件</p></div>`; 
             return;
         }
 
         container.innerHTML = filtered.map(item => `
-            <div class="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md bg-white flex flex-col transition">
+            <div class="border border-gray-200 rounded-2xl overflow-hidden hover:shadow-lg bg-white flex flex-col transition">
                 ${item.photos && item.photos.length > 0 
                     ? `<div class="h-48 overflow-hidden relative"><img src="${item.photos[0]}" class="w-full h-full object-cover"></div>` 
-                    : `<div class="h-20 bg-blue-50 flex items-center justify-center"><i class="fas fa-home text-3xl text-blue-200"></i></div>`
+                    : `<div class="h-20 bg-green-50 flex items-center justify-center"><i class="fas fa-image text-3xl text-green-200"></i></div>`
                 }
-                <div class="p-5 flex-grow">
-                    <h3 class="text-lg font-bold text-gray-900">${item.name}</h3>
-                    <p class="text-sm text-gray-500 mb-2">${item.region || '無區域'} | <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">${item.zoning || '一般'}</span></p>
-                    <p class="text-sm font-semibold mb-3">總價: <span class="text-red-600 text-lg">${item.totalPrice || '-'} 萬</span></p>
+                <div class="p-5 flex-grow flex flex-col">
+                    <h3 class="text-lg font-bold text-gray-900 truncate" title="${item.name}">${item.name}</h3>
+                    <p class="text-sm text-gray-500 mb-2 truncate">${item.region || '無區域'} | <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs">${item.zoning || '一般'}</span></p>
+                    <p class="text-sm font-semibold mb-3">總價: <span class="text-red-600 text-xl">${item.totalPrice || '-'} 萬</span></p>
                     
                     <div class="flex gap-1 bg-gray-50 p-1 rounded-lg border border-gray-100 mb-3 justify-center">
-                        <button onclick='window.app.exportSingleExcel(${JSON.stringify(item).replace(/'/g, "'")})' class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="匯出 Excel"><i class="fas fa-file-excel"></i></button>
-                        <button onclick='window.app.exportSinglePDF(${JSON.stringify(item).replace(/'/g, "'")})' class="p-1.5 text-rose-500 hover:bg-rose-100 rounded" title="匯出 PDF"><i class="fas fa-file-pdf"></i></button>
+                        <button onclick='window.app.exportSingleExcel(${JSON.stringify(item).replace(/'/g, "'")})' class="p-1.5 text-green-600 hover:bg-green-100 rounded transition" title="匯出 Excel"><i class="fas fa-file-excel"></i></button>
+                        <button onclick='window.app.exportSinglePDF(${JSON.stringify(item).replace(/'/g, "'")})' class="p-1.5 text-rose-500 hover:bg-rose-100 rounded transition" title="匯出 PDF"><i class="fas fa-file-pdf"></i></button>
                         <div class="w-px bg-gray-200 mx-1"></div>
-                        <button onclick='window.app.editCase("${item.id}")' class="p-1.5 text-blue-500 hover:bg-blue-100 rounded" title="編輯"><i class="fas fa-edit"></i></button>
-                        <button onclick='window.app.deleteCase("${item.id}")' class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded" title="刪除"><i class="fas fa-trash"></i></button>
+                        <button onclick='window.app.editCase("${item.id}")' class="p-1.5 text-blue-500 hover:bg-blue-100 rounded transition" title="編輯 (自動跳轉)"><i class="fas fa-edit"></i></button>
+                        <button onclick='window.app.deleteCase("${item.id}")' class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-100 rounded transition" title="刪除"><i class="fas fa-trash"></i></button>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-600 bg-gray-50/70 p-3 rounded-xl border border-gray-100">
-                        <div><span class="text-xs text-gray-400 block">單價</span><span>${item.unitPrice || '-'}</span></div>
-                        <div><span class="text-xs text-gray-400 block">地坪 / 建坪</span><span>${item.landArea || '-'} / ${item.buildArea || '-'}</span></div>
-                        <div class="col-span-2"><span class="text-xs text-gray-400 block">門牌號碼</span><span class="break-all">${item.address || '-'}</span></div>
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-gray-600 bg-gray-50/70 p-3 rounded-xl border border-gray-100 mt-auto">
+                        <div><span class="text-gray-400 block">單價</span><span class="font-medium">${item.unitPrice || '-'}</span></div>
+                        <div><span class="text-gray-400 block">地坪/建坪</span><span class="font-medium">${item.landArea || '-'}/${item.buildArea || '-'}</span></div>
+                        <div class="col-span-2"><span class="text-gray-400 block">門牌號碼</span><span class="font-medium truncate block" title="${item.address}">${item.address || '-'}</span></div>
                     </div>
                 </div>
             </div>
@@ -341,9 +416,14 @@ window.app = {
 
         try {
             const editId = document.getElementById('editId').value;
+            // 將縣市與區域合併儲存，例如 "高雄市鼓山區"
+            const c_city = document.getElementById('c_city').value;
+            const c_dist = document.getElementById('c_district').value;
+            const fullRegion = (c_city && c_dist) ? `${c_city}${c_dist}` : (document.getElementById('c_region')?.value || '');
+
             const caseData = {
                 date: document.getElementById('c_date').value,
-                region: document.getElementById('c_region').value,
+                region: fullRegion,
                 name: document.getElementById('c_name').value,
                 cadastral: document.getElementById('c_cadastral').value,
                 zoning: document.getElementById('c_zoning').value,
@@ -393,6 +473,7 @@ window.app = {
             }
             this.cancelEdit();
             await this.loadCases();
+            this.switchPage('list'); // 儲存完自動跳轉回列表頁
         } catch (error) {
             console.error(error);
             alert('儲存發生錯誤。');
@@ -405,9 +486,32 @@ window.app = {
         const item = casesData.find(c => c.id === id);
         if (!item) return;
 
+        // 切換到表單頁面
+        this.switchPage('form');
+
         document.getElementById('editId').value = item.id;
         document.getElementById('c_date').value = item.date || '';
-        document.getElementById('c_region').value = item.region || '';
+        
+        // 嘗試解析縣市與區域填回下拉選單
+        const fullReg = item.region || '';
+        let foundCity = '';
+        let foundDist = '';
+        for(const city of Object.keys(TAIWAN_REGIONS)) {
+            if(fullReg.startsWith(city)) {
+                foundCity = city;
+                foundDist = fullReg.replace(city, '');
+                break;
+            }
+        }
+        
+        const citySelect = document.getElementById('c_city');
+        const distSelect = document.getElementById('c_district');
+        if(foundCity) {
+            citySelect.value = foundCity;
+            this.onCityChange(); // 觸發連動
+            setTimeout(() => { distSelect.value = foundDist; }, 50); // 確保選單已產生
+        }
+
         document.getElementById('c_name').value = item.name || '';
         document.getElementById('c_cadastral').value = item.cadastral || '';
         document.getElementById('c_zoning').value = item.zoning || '';
@@ -429,12 +533,12 @@ window.app = {
         this.renderExistingFilesUI();
 
         document.getElementById('formTitle').innerHTML = '<i class="fas fa-edit"></i> 編輯案件資料';
-        document.getElementById('formHeader').classList.replace('bg-blue-50/50', 'bg-amber-50');
-        document.getElementById('formHeader').classList.replace('border-blue-100', 'border-amber-100');
-        document.getElementById('formTitle').classList.replace('text-blue-900', 'text-amber-900');
+        document.getElementById('formHeader').classList.replace('bg-green-50/50', 'bg-amber-50');
+        document.getElementById('formHeader').classList.replace('border-green-100', 'border-amber-100');
+        document.getElementById('formTitle').classList.replace('text-green-900', 'text-amber-900');
         const btn = document.getElementById('submitBtn');
         btn.innerHTML = '<i class="fas fa-save"></i> 更新案件資料';
-        btn.className = 'w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-amber-500 hover:bg-amber-600';
+        btn.className = 'w-full text-white font-bold py-3 px-4 rounded-xl shadow transition-all bg-amber-500 hover:bg-amber-600 text-lg';
         document.getElementById('cancelEditBtn').classList.remove('hidden');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
@@ -442,18 +546,19 @@ window.app = {
     cancelEdit: function() {
         document.getElementById('caseForm').reset();
         document.getElementById('editId').value = '';
+        document.getElementById('c_district').innerHTML = '<option value="">請先選擇縣市</option>';
         currentExistingPhotos = [];
         currentExistingPdfs = [];
         const container = document.getElementById('existingFilesContainer');
         if (container) container.innerHTML = '';
 
         document.getElementById('formTitle').innerHTML = '<i class="fas fa-plus"></i> 新增案件資料';
-        document.getElementById('formHeader').classList.replace('bg-amber-50', 'bg-blue-50/50');
-        document.getElementById('formHeader').classList.replace('border-amber-100', 'border-blue-100');
-        document.getElementById('formTitle').classList.replace('text-amber-900', 'text-blue-900');
+        document.getElementById('formHeader').classList.replace('bg-amber-50', 'bg-green-50/50');
+        document.getElementById('formHeader').classList.replace('border-amber-100', 'border-green-100');
+        document.getElementById('formTitle').classList.replace('text-amber-900', 'text-green-900');
         const btn = document.getElementById('submitBtn');
         btn.innerHTML = '<i class="fas fa-save"></i> 儲存並新增至總表';
-        btn.className = 'w-full text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all bg-blue-600 hover:bg-blue-700';
+        btn.className = 'w-full text-white font-bold py-3 px-4 rounded-xl shadow transition-all bg-green-600 hover:bg-green-700 text-lg';
         document.getElementById('cancelEditBtn').classList.add('hidden');
     },
 
@@ -473,30 +578,26 @@ window.app = {
 
     renderExistingFilesUI: function() {
         let container = document.getElementById('existingFilesContainer');
-        if (!container) {
-            const photoInput = document.getElementById('c_photos');
-            container = document.createElement('div');
-            container.id = 'existingFilesContainer';
-            photoInput.parentNode.insertBefore(container, photoInput);
-        }
+        if (!container) return;
+        
         if (currentExistingPhotos.length === 0 && currentExistingPdfs.length === 0) {
             container.innerHTML = ''; return;
         }
         container.innerHTML = `
-            <div class="my-4 p-3 border rounded-xl bg-gray-50 border-gray-200">
-                <p class="text-xs font-semibold text-gray-600 mb-2">已上傳的檔案 (點擊 X 刪除)：</p>
+            <div class="mb-4 p-3 border rounded-xl bg-white border-gray-200 shadow-sm">
+                <p class="text-xs font-semibold text-gray-600 mb-2"><i class="fas fa-cloud text-blue-400"></i> 已上傳雲端的檔案 (點擊 X 刪除)：</p>
                 <div class="flex flex-wrap gap-3">
                     ${currentExistingPhotos.map((url, idx) => `
-                        <div class="relative group w-16 h-16 border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        <div class="relative group w-16 h-16 border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
                             <img src="${url}" class="w-full h-full object-cover">
-                            <button type="button" onclick="window.app.removeExistingPhoto(${idx})" class="absolute top-0 right-0 bg-red-600 text-white p-1 text-xs hover:bg-red-700"><i class="fas fa-times"></i></button>
+                            <button type="button" onclick="window.app.removeExistingPhoto(${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded-bl-lg text-[10px] hover:bg-red-700"><i class="fas fa-times"></i></button>
                         </div>
                     `).join('')}
                     ${currentExistingPdfs.map((pdf, idx) => `
-                        <div class="relative group h-16 px-2 border border-gray-200 rounded-lg bg-white flex flex-col items-center justify-center text-center max-w-[80px]">
+                        <div class="relative group h-16 px-2 border border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center text-center max-w-[80px]">
                             <i class="fas fa-file-pdf text-red-500 text-xl mb-1"></i>
                             <span class="text-[10px] text-gray-500 truncate w-full" title="${pdf.name}">${pdf.name}</span>
-                            <button type="button" onclick="window.app.removeExistingPdf(${idx})" class="absolute top-0 right-0 bg-red-600 text-white p-1 text-xs hover:bg-red-700"><i class="fas fa-times"></i></button>
+                            <button type="button" onclick="window.app.removeExistingPdf(${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-5 h-5 flex items-center justify-center rounded-bl-lg text-[10px] hover:bg-red-700"><i class="fas fa-times"></i></button>
                         </div>
                     `).join('')}
                 </div>
@@ -507,7 +608,7 @@ window.app = {
     removeExistingPhoto: function(index) { currentExistingPhotos.splice(index, 1); this.renderExistingFilesUI(); },
     removeExistingPdf: function(index) { currentExistingPdfs.splice(index, 1); this.renderExistingFilesUI(); },
 
-    // ---------------- 單一與總表匯出 ----------------
+    // ---------------- 匯出功能 ----------------
     exportSinglePDF: function(c) {
         this.logAction('匯出單一 PDF', c.name);
         document.getElementById('loading').style.display = 'flex';
@@ -523,7 +624,7 @@ window.app = {
                     </tr>
                 </table>
                 ${c.address ? `<div style="margin-top:20px;"><h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">📍 案件位置圖</h3><iframe width="100%" height="250" frameborder="0" style="border:0; border-radius:8px;" src="https://maps.google.com/maps?q=${encodeURIComponent(c.address)}&t=&z=16&ie=UTF8&iwloc=&output=embed"></iframe></div>` : ''}
-                ${c.photos && c.photos.length > 0 ? `<div style="margin-top:20px;"><h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">📷 案件照片</h3><div style="display: flex; flex-wrap:wrap; gap: 10px;">${c.photos.map(p => `<img src="${p}" style="width: 48%; height: 200px; object-fit: cover; border-radius: 8px;">`).join('')}</div></div>` : ''}
+                ${c.photos && c.photos.length > 0 ? `<div style="margin-top:20px;"><h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">📷 案件照片</h3><div style="display: flex; flex-wrap:wrap; gap: 10px;">${c.photos.map(p => `<img crossorigin="anonymous" src="${p}" style="width: 48%; height: 200px; object-fit: cover; border-radius: 8px;">`).join('')}</div></div>` : ''}
             </div>
         `;
         const opt = { margin: 10, filename: `${c.name}_案件資料表.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, allowTaint: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } };
